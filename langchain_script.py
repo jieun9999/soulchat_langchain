@@ -4,7 +4,7 @@ from langchain_core.messages import (HumanMessage,SystemMessage)
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_chroma import Chroma
-from langchain_community.docstore.document import Document
+from langchain_core.documents import Document
 ##############################################################################################
 # 랭체인(LangChain)을 활용하여 허깅페이스(HuggingFace)에 배포된 사전학습 모델을 활용하여 LLM 체인을 구성
 # NCSOFT의 Llama-VARCO-8B-Instruct모델은 단순히 텍스트를 입력받아 텍스트를 생성하는 일반적인 언어 모델이 아니라, ChatGPT스타일의 채팅 모델로 설계
