@@ -1,16 +1,12 @@
-from langchain_huggingface import ChatHuggingFace, HuggingFacePipeline
-from transformers import BitsAndBytesConfig
-from langchain_core.messages import (HumanMessage,SystemMessage)
-from langchain_huggingface import HuggingFaceEmbeddings
-from langchain_chroma import Chroma
-from langchain_core.documents import Document
 from langchain_community.document_loaders import PyPDFLoader
 import re
 from langchain_experimental.text_splitter import SemanticChunker
-from langchain_huggingface import HuggingFaceEmbeddings
+import os
+from dotenv import load_dotenv
+from langchain_openai import OpenAIEmbeddings
 
 ##############################################################################################
-# 청킹 방법: SemanticChunker 사용, 임베딩 모델: huggingface 무료 모델
+# 청킹 방법: SemanticChunker 사용, 임베딩 모델: OpenAIEmbeddings 유료 모델
 ###############################################################################################
 
 ## Retrieval(검색기능) 붙이기
@@ -33,21 +29,29 @@ def remove_page_numbers(text):
 all_text = "\n".join([remove_page_numbers(doc.page_content) for doc in docs])
 
 # 2. 문서 분할
-# 임베딩 모델 초기화
-embeddings = HuggingFaceEmbeddings(
-    model_name="intfloat/multilingual-e5-large-instruct"
-)
+# .env 파일 로드
+load_dotenv()
+
+# 환경 변수 가져오기
+api_key = os.environ.get("OPENAI_API_KEY")
+
+# OpenAI의 "text-embedding-3-large" 모델을 사용하여 임베딩을 생성합니다.
+embeddings = OpenAIEmbeddings(model="text-embedding-3-small")
+
 text_splitter = SemanticChunker(embeddings)
 
 # SemanticChunker를 사용하여 청킹
 final_chunks = text_splitter.split_text(all_text)
 
 # 청킹된 결과를 txt 파일로 저장
-output_file_path = "/workspace/hdd/RAG/chunks_SemanticChunker.txt"
+output_file_path = "/workspace/hdd/RAG/chunks_OpenAIEmbeddings_SemanticChunker.txt"
 
 with open(output_file_path, "w", encoding="utf-8") as file:
     for i, chunk in enumerate(final_chunks):
         file.write(f"청크 {i + 1}:\n{chunk}\n\n")  # 청크 번호와 내용 저장
 
 print(f"청킹된 결과가 {output_file_path}에 저장되었습니다.")
+
+
+
 

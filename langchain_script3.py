@@ -8,10 +8,16 @@ from langchain_community.document_loaders import PyPDFLoader
 import re
 from langchain_experimental.text_splitter import SemanticChunker
 from langchain_huggingface import HuggingFaceEmbeddings
+from langchain.text_splitter import KonlpyTextSplitter
+from konlpy.tag import Kkma
 
 ##############################################################################################
-# 청킹 방법: SemanticChunker 사용, 임베딩 모델: huggingface 무료 모델
+# 청킹 방법: KonlpyTextSplitter 사용
 ###############################################################################################
+
+# Konlpy는 내부적으로 Java 기반의 한국어 형태소 분석기를 사용합니다(Kkma, Hannanum 등). 따라서 JVM이 필요하며, 이를 위해 Java 설치 및 환경 변수 설정이 필요합니다.
+kkma = Kkma()
+print(kkma.morphs("테스트 문장을 분석합니다."))
 
 ## Retrieval(검색기능) 붙이기
 # 1. 문서 로드
@@ -33,21 +39,15 @@ def remove_page_numbers(text):
 all_text = "\n".join([remove_page_numbers(doc.page_content) for doc in docs])
 
 # 2. 문서 분할
-# 임베딩 모델 초기화
-embeddings = HuggingFaceEmbeddings(
-    model_name="intfloat/multilingual-e5-large-instruct"
-)
-text_splitter = SemanticChunker(embeddings)
-
+text_splitter = KonlpyTextSplitter(chunk_size=500, chunk_overlap=100)
 # SemanticChunker를 사용하여 청킹
 final_chunks = text_splitter.split_text(all_text)
 
 # 청킹된 결과를 txt 파일로 저장
-output_file_path = "/workspace/hdd/RAG/chunks_SemanticChunker.txt"
+output_file_path = "/workspace/hdd/RAG/chunks_KonlpyTextSplitter.txt"
 
 with open(output_file_path, "w", encoding="utf-8") as file:
     for i, chunk in enumerate(final_chunks):
         file.write(f"청크 {i + 1}:\n{chunk}\n\n")  # 청크 번호와 내용 저장
 
 print(f"청킹된 결과가 {output_file_path}에 저장되었습니다.")
-

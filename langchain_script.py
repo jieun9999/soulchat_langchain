@@ -8,9 +8,11 @@ from langchain_core.documents import Document
 from langchain_community.document_loaders import PyPDFLoader
 import pprint
 import re
+import os
+from dotenv import load_dotenv
 ##############################################################################################
-# 랭체인(LangChain)을 활용하여 허깅페이스(HuggingFace)에 배포된 사전학습 모델을 활용하여 LLM 체인을 구성
 # 청킹 방법: 먼저 제목을 기준으로 큰 단위로 분할한 뒤, 각 섹션 내에서 RecursiveCharacterTextSplitter를 사용해 청킹
+# 랭체인(LangChain)을 활용하여 허깅페이스(HuggingFace)에 배포된 사전학습 모델을 활용하여 LLM 체인을 구성
 ###############################################################################################
 
 
@@ -71,7 +73,7 @@ def split_into_sections(text, titles):
 
 # RecursiveTextSplitter 설정
 text_splitter = RecursiveCharacterTextSplitter(
-    chunk_size=500,  # 각 청크의 최대 문자 수
+    chunk_size=1000,  # 각 청크의 최대 문자 수
     chunk_overlap=100,  # 청크 간 중복 문자 수
     separators=["\n\n", "\n", " "]  # 큰 단위부터 작은 단위로 분할
 )
@@ -95,7 +97,7 @@ for title, section_content in sections.items():
             final_chunks.append(chunk)
 
 # 청킹된 결과를 txt 파일로 저장
-output_file_path = "/workspace/hdd/RAG/chunks_title_RecursiveCharacterTextSplitter.txt"
+output_file_path = "/workspace/hdd/RAG/chunks1000_title_RecursiveCharacterTextSplitter.txt"
 
 with open(output_file_path, "w", encoding="utf-8") as file:
     for i, chunk in enumerate(final_chunks):
@@ -134,12 +136,11 @@ print(f"청킹된 결과가 {output_file_path}에 저장되었습니다.")
 
 
 # ## 7. LLM 추론
-# # hf_access_token.txt 파일에서 토큰 읽기
-# with open('/workspace/hdd/RAG/hf_access_token.txt', 'r') as file:
-#     hf_token = file.read().strip()  # 파일 내용 읽고 양쪽 공백 제거
+# # .env 파일 로드
+# load_dotenv()
 
-# # 환경 변수에서 토큰 가져오기
-# api_key = os.getenv(hf_token)
+# # Hugging Face Access Token 가져오기
+# hf_access_token = os.environ.get("HF_ACCESS_TOKEN")
 
 # quantization_config = BitsAndBytesConfig(
 #     load_in_4bit=True,
