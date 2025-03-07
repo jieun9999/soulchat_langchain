@@ -10,16 +10,15 @@ import pprint
 import re
 ##############################################################################################
 # 랭체인(LangChain)을 활용하여 허깅페이스(HuggingFace)에 배포된 사전학습 모델을 활용하여 LLM 체인을 구성
-# NCSOFT의 Llama-VARCO-8B-Instruct모델은 단순히 텍스트를 입력받아 텍스트를 생성하는 일반적인 언어 모델이 아니라, ChatGPT스타일의 채팅 모델로 설계
-# Hugging Face의 pipeline API나 LangChain의 HuggingFacePipeline만으로는 적절히 처리하기 어렵습니다. 
-# 채팅 모델에는 ChatHuggingFace를 사용하는 것이 맞습니다.
+# 청킹 방법: 먼저 제목을 기준으로 큰 단위로 분할한 뒤, 각 섹션 내에서 RecursiveCharacterTextSplitter를 사용해 청킹
 ###############################################################################################
 
-## Retrieval(검색기능) 붙이기
+
 # 1. 문서 로드
 file_path = "/workspace/hdd/RAG/persona_250304.pdf"
 loader = PyPDFLoader(file_path)
 docs = loader.load() #PDF의 각 페이지를 독립적으로 처리
+docs = docs[1:]  # 첫 번째 페이지를 제외
 
 # print(docs[5].page_content)
 # pprint.pp(docs[5].metadata) # 0부터 9까지의 인덱스만 존재
@@ -77,31 +76,26 @@ text_splitter = RecursiveCharacterTextSplitter(
     separators=["\n\n", "\n", " "]  # 큰 단위부터 작은 단위로 분할
 )
 
-# 전체 문서 처리 (첫 번째 페이지 제외)
-final_chunks = []
+# (1). 제목 리스트를 기준으로 섹션 분할
+sections = split_into_sections(all_text, titles)
 
-for i, doc in enumerate(docs[1:]):  # 첫 번째 페이지를 제외하고 처리
-    print(f"Processing Page {i + 2}...")  # i + 2로 페이지 번호 출력 (1-based index)
-    text = doc.page_content  # 해당 페이지의 텍스트
+# (2). 각 섹션 내에서 RecursiveCharacterTextSplitter로 추가 분할
+final_chunks = []
+for title, section_content in sections.items():
+    # 섹션 내용을 RecursiveCharacterTextSplitter로 분할
+    section_chunks = text_splitter.split_text(section_content)
     
-    # (1). 제목 리스트를 기준으로 섹션 분할
-    sections = split_into_sections(all_text, titles)
-    
-    # (2). 각 섹션 내에서 RecursiveCharacterTextSplitter로 추가 분할
-    for title, section_content in sections.items():
-        section_chunks = text_splitter.split_text(section_content)
-        
-        # 제목과 내용을 하나의 청크로 묶기
-        for idx, chunk in enumerate(section_chunks):
-            if idx == 0:
-                # 첫 번째 청크에는 제목 포함
-                final_chunks.append(f"제목: {title}\n{chunk}")
-            else:
-                # 두 번째 청크부터는 제목 없이 내용만 추가
-                final_chunks.append(chunk)
+    # 제목과 내용을 하나의 청크로 묶기
+    for idx, chunk in enumerate(section_chunks):
+        if idx == 0:
+            # 첫 번째 청크에는 제목 포함
+            final_chunks.append(f"제목: {title}\n{chunk}")
+        else:
+            # 두 번째 청크부터는 제목 없이 내용만 추가
+            final_chunks.append(chunk)
 
 # 청킹된 결과를 txt 파일로 저장
-output_file_path = "/workspace/hdd/RAG/final_chunks.txt"
+output_file_path = "/workspace/hdd/RAG/chunks_title_RecursiveCharacterTextSplitter.txt"
 
 with open(output_file_path, "w", encoding="utf-8") as file:
     for i, chunk in enumerate(final_chunks):
