@@ -160,12 +160,7 @@ results = perform_search(vector_store, query)
 # 6. 프롬프트 생성
 
 
-# ## 7. LLM 추론
-# # .env 파일 로드
-# load_dotenv()
-
-# # Hugging Face Access Token 가져오기
-# hf_access_token = os.environ.get("HF_ACCESS_TOKEN")
+# 7. LLM 추론
 
 # quantization_config = BitsAndBytesConfig(
 #     load_in_4bit=True,
