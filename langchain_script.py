@@ -10,9 +10,15 @@ import pprint
 import re
 import os
 from dotenv import load_dotenv
+from langchain_openai import OpenAIEmbeddings
+from langchain.embeddings import CacheBackedEmbeddings
+from langchain.storage import LocalFileStore
 ##############################################################################################
 # 청킹 방법: 먼저 제목을 기준으로 큰 단위로 분할한 뒤, 각 섹션 내에서 RecursiveCharacterTextSplitter를 사용해 청킹
-# 랭체인(LangChain)을 활용하여 허깅페이스(HuggingFace)에 배포된 사전학습 모델을 활용하여 LLM 체인을 구성
+# 임베딩 모델 : open ai의 text-embedding-3-small + CacheBackedEmbeddings(캐시용)
+# 벡터 스토어 : Chromadb 
+# Retriever :
+# LLM : NCSOFT/Llama-VARCO-8B-Instruct
 ###############################################################################################
 
 
@@ -106,33 +112,52 @@ with open(output_file_path, "w", encoding="utf-8") as file:
 print(f"청킹된 결과가 {output_file_path}에 저장되었습니다.")
 
 # # 3. 임베딩 모델 불러오기
-# model_name = "snunlp/KR-SBERT-V40K-klueNLI-augSTS"
-# embeddings = HuggingFaceEmbeddings(model_name=model_name)
+# .env 파일 로드
+load_dotenv()
+# 환경 변수 가져오기
+api_key = os.environ.get("OPENAI_API_KEY")
 
-# # 4. 벡터스토어 생성 및 청크 저장
-# vector_store = Chroma(
-#     collection_name="nerd_boy_txt_collection",
-#     embedding_function=embeddings,
-#     persist_directory="./chroma_langchain_db",  # Where to save data locally, remove if not necessary
-# )
-# # 각 청크를 Document 형태로 변환
-# # chunks : 텍스트를 작은 단위로 나눈 결과를 담고 있는 리스트
-# # chunks 리스트의 각 텍스트 청크를 Document 객체로 변환합니다.
-# docs = [Document(page_content=chunk) for chunk in chunks]
-# vector_store.add_documents(docs)
+# OpenAI의 "text-embedding-3-small" 모델을 사용하여 임베딩을 생성합니다.
+openai_embedding = OpenAIEmbeddings(model="text-embedding-3-small")
+# 캐시를 지원하는 임베딩 래퍼 생성
+store = LocalFileStore("./cache/")
+cached_embedder = CacheBackedEmbeddings.from_bytes_store(
+    openai_embedding, store, namespace = openai_embedding.model
+)
+
+# 4. 벡터스토어 생성 및 청크 저장
+vector_store = Chroma(
+    collection_name="persona_collection",
+    embedding_function=cached_embedder,
+    persist_directory="./chroma_langchain_db",  # Where to save data locally, remove if not necessary
+)
+# 각 청크를 Document 형태로 변환
+# final_chunks : 텍스트를 작은 단위로 나눈 결과를 담고 있는 리스트
+# final_chunks 리스트의 각 텍스트 청크를 Document 객체로 변환합니다.
+docs = [Document(page_content=chunk) for chunk in final_chunks]
+
+# 각 청크에 대해 임베딩을 생성하여 캐시에 저장
+for doc in docs:
+    embedding = cached_embedder.embed_query(doc.page_content)  
+# 이 과정에서:
+# 캐시에 해당 텍스트의 임베딩이 존재하는지 확인합니다.
+# 존재하면 캐시된 임베딩을 반환합니다.
+# 존재하지 않으면 OpenAI API를 호출하여 새 임베딩을 생성하고, 이를 캐시에 저장합니다.
+
+vector_store.add_documents(docs) # 벡터스토어(Vector Store)에 문서(docs)를 추가
 
 # # 5. Retriever 생성
-# query = "유저와의 관계?"
-# results = vector_store.similarity_search(
+# query = "지환이가 싫어하는 것은 무엇인가요?"
+# results = vector_store.similarity_search_with_score(
 #     query=query,
-#     k=1
+#     k=3
 # )
 # # 검색 결과 출력
 # print("검색 결과:")
-# for res in results:
-#     print(f"* {res.page_content}")
+# for res, score in results:
+#     print(f"* 유사도 점수: {score}\n{res.page_content}")
 
-# 6. 
+# 6. 프롬프트 생성
 
 
 # ## 7. LLM 추론
