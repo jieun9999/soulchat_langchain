@@ -13,6 +13,7 @@ from dotenv import load_dotenv
 from langchain_openai import OpenAIEmbeddings
 from langchain.embeddings import CacheBackedEmbeddings
 from langchain.storage import LocalFileStore
+from langsmith import traceable
 ##############################################################################################
 # 청킹 방법: 먼저 제목을 기준으로 큰 단위로 분할한 뒤, 각 섹션 내에서 RecursiveCharacterTextSplitter를 사용해 청킹
 # 임베딩 모델 : open ai의 text-embedding-3-small + CacheBackedEmbeddings(캐시용)
@@ -112,10 +113,8 @@ with open(output_file_path, "w", encoding="utf-8") as file:
 print(f"청킹된 결과가 {output_file_path}에 저장되었습니다.")
 
 # # 3. 임베딩 모델 불러오기
-# .env 파일 로드
+# .env 파일 로드 : .env 파일에 정의된 환경 변수를 자동으로 읽어서 현재 실행 중인 Python 프로세스의 환경 변수로 설정
 load_dotenv()
-# 환경 변수 가져오기
-api_key = os.environ.get("OPENAI_API_KEY")
 
 # OpenAI의 "text-embedding-3-small" 모델을 사용하여 임베딩을 생성합니다.
 openai_embedding = OpenAIEmbeddings(model="text-embedding-3-small")
@@ -146,16 +145,17 @@ for doc in docs:
 
 vector_store.add_documents(docs) # 벡터스토어(Vector Store)에 문서(docs)를 추가
 
-# # 5. Retriever 생성
-# query = "지환이가 싫어하는 것은 무엇인가요?"
-# results = vector_store.similarity_search_with_score(
-#     query=query,
-#     k=3
-# )
-# # 검색 결과 출력
-# print("검색 결과:")
-# for res, score in results:
-#     print(f"* 유사도 점수: {score}\n{res.page_content}")
+@traceable
+def perform_search(vector_store, query, k=3):
+    """
+    벡터 스토어에서 검색을 수행하고 결과를 반환합니다.
+    """
+    results = vector_store.similarity_search_with_score(query=query, k=k)
+    return results
+
+# 5. Retriever 생성
+query = "지환이가 싫어하는 것은 무엇인가요?"
+results = perform_search(vector_store, query)
 
 # 6. 프롬프트 생성
 
