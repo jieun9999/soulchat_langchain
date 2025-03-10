@@ -21,10 +21,12 @@ human = """#Question:
 
 # 프롬프트 템플릿 생성
 prompt = ChatPromptTemplate.from_messages([("system", system), ("human", human)])
-# langchain hub에 프롬트트 업로드
-url = prompts.push("character_chat", prompt)
 
-# url is a link to the prompt in the UI
-print(url)
+print(prompt)
+# langchain hub에 프롬프트 업로드
+# url = prompts.push("character_chat", prompt)
 
-print("프롬프트가 LangChain Hub에 업로드되었습니다")
+# # url is a link to the prompt in the UI
+# print(url)
+
+# print("프롬프트가 LangChain Hub에 업로드되었습니다")
