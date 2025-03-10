@@ -15,11 +15,12 @@ from langchain.embeddings import CacheBackedEmbeddings
 from langchain.storage import LocalFileStore
 from langsmith import traceable
 import pandas as pd
+from sentence_transformers import util
 ##############################################################################################
 # 청킹 방법: 먼저 제목을 기준으로 큰 단위로 분할한 뒤, 각 섹션 내에서 RecursiveCharacterTextSplitter를 사용해 청킹
 # 임베딩 모델 : open ai의 text-embedding-3-small + CacheBackedEmbeddings(캐시용)
 # 벡터 스토어 : Chromadb 
-# Retriever :
+# Retriever : 제목에 가중치를 부여하는 방식
 # LLM : NCSOFT/Llama-VARCO-8B-Instruct
 ###############################################################################################
 
@@ -55,7 +56,6 @@ titles = [
     "일에 대한 가치관", "기술에 대한 가치관", "인간관계에 대한 가치관",
     "스트레스 해소 방법", "특이한 습관", "좋아하는 장소","소중히 여기는 물건"
 ]
-
 
 def split_into_sections(text, titles):
     """
@@ -116,7 +116,7 @@ with open(output_file_path, "w", encoding="utf-8") as file:
 
 print(f"청킹된 결과가 {output_file_path}에 저장되었습니다.")
 
-# # 3. 임베딩 모델 불러오기
+# 3. 임베딩 모델 불러오기
 # .env 파일 로드 : .env 파일에 정의된 환경 변수를 자동으로 읽어서 현재 실행 중인 Python 프로세스의 환경 변수로 설정
 load_dotenv()
 
@@ -128,55 +128,56 @@ cached_embedder = CacheBackedEmbeddings.from_bytes_store(
     openai_embedding, store, namespace = openai_embedding.model
 )
 
-# 4. 백터스토어 생성 or 이미 존재하면 로드
+## 4. 유사도 계산함수 로드
+# 제목과 본문 유사도 계산 함수
+# query: 사용자가 입력한 검색어(쿼리). 
+# chunk: 제목과 본문이 포함된 텍스트 청크.
+# embedder: 텍스트를 벡터로 변환하는 임베딩 모델.
+# title_weight: 제목의 유사도에 부여할 가중치 (기본값은 1.5).
+def calculate_similarity(query, chunk, embedder, title_weight=1.5):
+    title, content = chunk.split("\n", 1) if "\n" in chunk else (chunk, "") # 청크(chunk)에서 제목과 본문을 분리
+    title = title.replace("제목: ", "").strip()
+    query_emb, title_emb, content_emb = embedder.embed_query(query), embedder.embed_query(title), embedder.embed_query(content) # 쿼리(query), 제목(title), **본문(content)**을 임베딩 모델(embedder)을 사용해 각각 벡터로 변환
+    title_sim, content_sim = util.cos_sim(query_emb, title_emb).item(), util.cos_sim(query_emb, content_emb).item()
+    # 코사인 유사도를 계산:
+    # query_emb와 title_emb 간의 유사도: title_sim.
+    # query_emb와 content_emb 간의 유사도: content_sim.
+    return (title_weight * title_sim) + content_sim, title_sim, content_sim
+    # 반환값:최종 유사도, 제목 유사도, 본문 유사도
 
-# 각 청크를 Document 형태로 변환
-# final_chunks : 텍스트를 작은 단위로 나눈 결과를 담고 있는 리스트
-# final_chunks 리스트의 각 텍스트 청크를 Document 객체로 변환합니다.
-docs = [Document(page_content=chunk) for chunk in final_chunks]
-
-# 각 청크에 대해 임베딩을 생성하여 캐시에 저장
-for doc in docs:
-    embedding = cached_embedder.embed_query(doc.page_content)  
-# 이 과정에서:
-# 캐시에 해당 텍스트의 임베딩이 존재하는지 확인합니다.
-# 존재하면 캐시된 임베딩을 반환합니다.
-# 존재하지 않으면 OpenAI API를 호출하여 새 임베딩을 생성하고, 이를 캐시에 저장합니다.
-
-# 벡터스토어 저장 경로
-vector_store_path = "./chroma_langchain_db"
-
-# 벡터스토어 로드 또는 생성
-if os.path.exists(vector_store_path):
-    print("기존 벡터스토어를 로드합니다...")
-    vector_store = Chroma(
-        collection_name="persona_collection2",
-        embedding_function=cached_embedder,
-        persist_directory=vector_store_path,
-    )
-else:
+## 5. 벡터스토어 생성 또는 로드
+def create_or_load_vectorstore(chunks, embedder, store_path="./chroma_langchain_db"):
+    docs = [Document(page_content=chunk) for chunk in chunks]
+    if os.path.exists(store_path):
+        print("기존 벡터스토어를 로드합니다...")
+        return Chroma(collection_name="persona_collection", embedding_function=embedder, persist_directory=store_path)
     print("벡터스토어를 생성합니다...")
-    vector_store = Chroma(
-        collection_name="persona_collection2",
-        embedding_function=cached_embedder,
-        persist_directory=vector_store_path,  # 데이터를 로컬에 저장
-    )
-    vector_store.add_documents(docs)  # 벡터스토어(Vector Store)에 문서(docs)를 추가
-    print("벡터스토어가 생성되었습니다.")
+    vector_store = Chroma(collection_name="persona_collection", embedding_function=embedder, persist_directory=store_path)
+    vector_store.add_documents(docs)
+    return vector_store
 
-@traceable
-def perform_search(vector_store, query, k=3):
-    """
-    벡터 스토어에서 검색을 수행하고 결과를 반환합니다.
-    """
+# 3. 가중치를 고려한 검색 함수
+def search_with_weight(vector_store, query, k=3, title_weight=1.5):
     results = vector_store.similarity_search_with_score(query=query, k=k)
-    return results
+    weighted_results = [
+        {
+            "chunk": result[0].page_content,
+            "final_score": final_score,
+            "title_sim": title_sim,
+            "content_sim": content_sim
+        }
+        for result in results #results 리스트에서 하나씩 result를 가져옵니다.
+            for final_score, title_sim, content_sim in [calculate_similarity(query, result[0].page_content, cached_embedder, title_weight)] #calculate_similarity 함수는 튜플 (final_score, title_sim, content_sim)을 반환합니다.[calculate_similarity(...)]는 리스트로 감싸져 있으므로, 여기서 반환된 튜플을 바로 반복문으로 풀어냅니다.
+    ]   
+    
+    return sorted(weighted_results, key=lambda x: x["final_score"], reverse=True)[:k]
 
-# 5. Retriever 생성
+# 4. 실행
+vector_store = create_or_load_vectorstore(final_chunks, cached_embedder)
 
+# 검색 수행
 queries = [
     "우리 처음 만났을 때 기억나?",
-    "지환과 유저가 처음만났을때 기억나?"
     "어떤 기술에 관심이 있어?",
     "다음에 카페 가서 공부하자! 어때?",
     "너는 주말에 보통 뭐 해?",
@@ -198,33 +199,24 @@ queries = [
     "너는 여행 가는 거 좋아해?"
 ]
 
-
-# 검색 결과를 CSV 파일로 저장
-output_csv_path = "/workspace/hdd/RAG/search_results.csv"
-# 검색 결과를 저장할 리스트
-search_results = []
-
+results_list = []
 for query in queries:
-    # 검색 수행
-    results = perform_search(vector_store, query)
-    
-    # 결과를 리스트에 추가
+    results = search_with_weight(vector_store, query)
     for result in results:
-        chunk = result[0].page_content  # 검색된 청크
-        similarity_score = result[1]  # 유사도 점수
-        search_results.append({
+        results_list.append({
             "쿼리": query,
-            "유사도 점수": similarity_score,
-            "검색된 청크": chunk
+            "최종 점수": result["final_score"],
+            "제목 유사도": result["title_sim"],
+            "본문 유사도": result["content_sim"],
+            "검색된 청크": result["chunk"]
         })
 
-# 리스트를 DataFrame으로 변환
-df = pd.DataFrame(search_results)
-
-# CSV 파일로 저장
-df.to_csv(output_csv_path, index=False, encoding="utf-8-sig")
+# 결과 저장
+output_csv_path = "/workspace/hdd/RAG/search_results_with_weights.csv"
+pd.DataFrame(results_list).to_csv(output_csv_path, index=False, encoding="utf-8-sig")
 
 print(f"검색 결과가 CSV 파일로 저장되었습니다: {output_csv_path}")
+
 
 # 6. 프롬프트 생성
 
