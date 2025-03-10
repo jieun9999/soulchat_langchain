@@ -25,10 +25,10 @@ import pandas as pd
 
 
 # 1. 문서 로드
-file_path = "/workspace/hdd/RAG/persona_250304.pdf"
+file_path = "/workspace/hdd/RAG/persona_250310.pdf"
 loader = PyPDFLoader(file_path)
 docs = loader.load() #PDF의 각 페이지를 독립적으로 처리
-docs = docs[1:]  # 첫 번째 페이지를 제외
+# docs = docs[1:]  # 첫 번째 페이지를 제외
 
 # print(docs[5].page_content)
 # pprint.pp(docs[5].metadata) # 0부터 9까지의 인덱스만 존재
@@ -48,7 +48,7 @@ all_text = "\n".join([remove_page_numbers(doc.page_content) for doc in docs])
 # 2. 문서 분할
 # 제목 리스트 정의
 titles = [
-    "외모", "직업과 능력", "싫어하는 것", "두려워하는 것",
+    "기본 정보","외모", "직업과 능력", "싫어하는 것", "두려워하는 것",
     "연애와 인간관계", "어린 시절과 학창 시절", "지환과 유저의 관계",
     "취미생활", "이상형", "일상 루틴", "좋아하는 음식","싫어하는 음식", "가치관과 철학",
     "스트레스 해소 방법", "특이한 습관", "좋아하는 장소","소중히 여기는 물건"
@@ -140,12 +140,26 @@ for doc in docs:
 # 존재하면 캐시된 임베딩을 반환합니다.
 # 존재하지 않으면 OpenAI API를 호출하여 새 임베딩을 생성하고, 이를 캐시에 저장합니다.
 
-vector_store = Chroma(
-    collection_name="persona_collection",
-    embedding_function=cached_embedder,
-    persist_directory="./chroma_langchain_db",  # Where to save data locally, remove if not necessary
-)
-vector_store.add_documents(docs) # 벡터스토어(Vector Store)에 문서(docs)를 추가
+# 벡터스토어 저장 경로
+vector_store_path = "./chroma_langchain_db"
+
+# 벡터스토어 로드 또는 생성
+if os.path.exists(vector_store_path):
+    print("기존 벡터스토어를 로드합니다...")
+    vector_store = Chroma(
+        collection_name="persona_collection2",
+        embedding_function=cached_embedder,
+        persist_directory=vector_store_path,
+    )
+else:
+    print("벡터스토어를 생성합니다...")
+    vector_store = Chroma(
+        collection_name="persona_collection2",
+        embedding_function=cached_embedder,
+        persist_directory=vector_store_path,  # 데이터를 로컬에 저장
+    )
+    vector_store.add_documents(docs)  # 벡터스토어(Vector Store)에 문서(docs)를 추가
+    print("벡터스토어가 생성되었습니다.")
 
 @traceable
 def perform_search(vector_store, query, k=3):
@@ -156,39 +170,57 @@ def perform_search(vector_store, query, k=3):
     return results
 
 # 5. Retriever 생성
-# 검색 쿼리 리스트
-# 청크 8에 관련된 쿼리들
+
 queries = [
-    "동아리 첫날 내가 질문했을 때 친절하게 답해줘서 정말 고마웠어. 그때 기억나?",
-    "내가 질문할 때마다 꼼꼼히 답해주는 거 보면, 혹시 나한테 관심 있어?",
-    "언제 시간 되냐고 물어봤던 적 있잖아. 그때 나랑 더 이야기하고 싶었던 거 맞지?"
+    "우리 처음 만났을 때 기억나?",
+    "너는 왜 개발자가 되고 싶어?",
+    "다음에 카페 가서 공부하자! 어때?",
+    "너는 주말에 보통 뭐 해?",
+    "내가 고민이 있어.. 넌 스트레스 받을 때 어떻게 해?",
+    "넌 어떤 스타일의 사람이 좋아?",
+    "너 생일 언제야? 생일에 뭐 하고 싶어?",
+    "요즘 공부하느라 힘들어.. 너는 공부 어떻게 해?",
+    "배고프다.. 우리 뭐 먹을까?",
+    "너는 실패하면 어떻게 해?",
+    "너는 노트북 없이 하루 살 수 있어?",
+    "우리 학교 끝나고 뭐 할까?",
+    "너는 평소에 어떤 성격이야?",
+    "우리 이번 주말에 영화 보러 갈래?",
+    "너랑 있으면 편해! 너는 사람 만날 때 어때?",
+    "너는 아침형 인간이야? 저녁형 인간이야?",
+    "우리 같이 공부하면 집중 잘 될까?",
+    "너는 대화할 때 어떤 스타일이야?",
+    "넌 감성적인 편이야? 논리적인 편이야?",
+    "너는 여행 가는 거 좋아해?"
 ]
 
-# 각 쿼리에 대한 검색 결과 저장
-all_results = []
-
-# 각 쿼리에 대해 검색 수행
-for query in queries:
-    results = perform_search(vector_store, query, k=3)  # k=3: 상위 3개의 검색 결과 반환
-    for result in results:
-        all_results.append({
-            "유저의 쿼리": query,
-            "검색된 청크": result[0].page_content  # 검색된 청크 내용
-        })
 
 # 검색 결과를 CSV 파일로 저장
-def save_results_to_csv(results, output_path):
-    # 결과를 데이터프레임으로 변환
-    df = pd.DataFrame(results)
-
-    # CSV 파일로 저장
-    df.to_csv(output_path, index=False, encoding="utf-8-sig")  # UTF-8 with BOM 설정
-    print(f"검색 결과가 CSV 파일로 저장되었습니다: {output_path}")
-
-# CSV 파일 저장 경로
 output_csv_path = "/workspace/hdd/RAG/search_results.csv"
-save_results_to_csv(all_results, output_csv_path)
+# 검색 결과를 저장할 리스트
+search_results = []
 
+for query in queries:
+    # 검색 수행
+    results = perform_search(vector_store, query)
+    
+    # 결과를 리스트에 추가
+    for result in results:
+        chunk = result[0].page_content  # 검색된 청크
+        similarity_score = result[1]  # 유사도 점수
+        search_results.append({
+            "쿼리": query,
+            "유사도 점수": similarity_score,
+            "검색된 청크": chunk
+        })
+
+# 리스트를 DataFrame으로 변환
+df = pd.DataFrame(search_results)
+
+# CSV 파일로 저장
+df.to_csv(output_csv_path, index=False, encoding="utf-8-sig")
+
+print(f"검색 결과가 CSV 파일로 저장되었습니다: {output_csv_path}")
 
 # 6. 프롬프트 생성
 
