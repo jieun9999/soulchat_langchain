@@ -128,7 +128,7 @@ cached_embedder = CacheBackedEmbeddings.from_bytes_store(
     openai_embedding, store, namespace = openai_embedding.model
 )
 
-## 4. 유사도 계산함수 로드
+## 4. 유사도 계산함수 및 가중치 고려한 검색함수 로드
 # 제목과 본문 유사도 계산 함수
 # query: 사용자가 입력한 검색어(쿼리). 
 # chunk: 제목과 본문이 포함된 텍스트 청크.
@@ -145,18 +145,7 @@ def calculate_similarity(query, chunk, embedder, title_weight=1.5):
     return (title_weight * title_sim) + content_sim, title_sim, content_sim
     # 반환값:최종 유사도, 제목 유사도, 본문 유사도
 
-## 5. 벡터스토어 생성 또는 로드
-def create_or_load_vectorstore(chunks, embedder, store_path="./chroma_langchain_db"):
-    docs = [Document(page_content=chunk) for chunk in chunks]
-    if os.path.exists(store_path):
-        print("기존 벡터스토어를 로드합니다...")
-        return Chroma(collection_name="persona_collection", embedding_function=embedder, persist_directory=store_path)
-    print("벡터스토어를 생성합니다...")
-    vector_store = Chroma(collection_name="persona_collection", embedding_function=embedder, persist_directory=store_path)
-    vector_store.add_documents(docs)
-    return vector_store
-
-# 3. 가중치를 고려한 검색 함수
+# 가중치를 고려한 검색 함수
 def search_with_weight(vector_store, query, k=3, title_weight=1.5):
     results = vector_store.similarity_search_with_score(query=query, k=k)
     weighted_results = [
@@ -172,7 +161,18 @@ def search_with_weight(vector_store, query, k=3, title_weight=1.5):
     
     return sorted(weighted_results, key=lambda x: x["final_score"], reverse=True)[:k]
 
-# 4. 실행
+## 5. 벡터스토어 생성 또는 로드
+def create_or_load_vectorstore(chunks, embedder, store_path="./chroma_langchain_db"):
+    docs = [Document(page_content=chunk) for chunk in chunks]
+    if os.path.exists(store_path):
+        print("기존 벡터스토어를 로드합니다...")
+        return Chroma(collection_name="persona_collection", embedding_function=embedder, persist_directory=store_path)
+    print("벡터스토어를 생성합니다...")
+    vector_store = Chroma(collection_name="persona_collection", embedding_function=embedder, persist_directory=store_path)
+    vector_store.add_documents(docs)
+    return vector_store
+
+# 실행
 vector_store = create_or_load_vectorstore(final_chunks, cached_embedder)
 
 # 검색 수행
@@ -214,7 +214,6 @@ for query in queries:
 # 결과 저장
 output_csv_path = "/workspace/hdd/RAG/search_results_with_weights.csv"
 pd.DataFrame(results_list).to_csv(output_csv_path, index=False, encoding="utf-8-sig")
-
 print(f"검색 결과가 CSV 파일로 저장되었습니다: {output_csv_path}")
 
 
