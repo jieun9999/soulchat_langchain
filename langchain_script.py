@@ -174,6 +174,54 @@ def perform_search(vector_store, query, k=3):
 
 # 5. Retriever 생성
 
+def replace_pronouns(query, persona_name="서지환", user_name="유저"):
+    # 1. 대명사 매핑
+    pronoun_map = {
+        # 1인칭 (사용자 본인)
+        r"\b나는\b": f"{user_name}은",
+        r"\b내가\b": f"{user_name}이",
+        r"\b내\b": f"{user_name}의",
+        r"\b나의\b": f"{user_name}의",
+        r"\b날\b": f"{user_name}을",
+        r"\b나를\b": f"{user_name}을",
+        r"\b나에게\b": f"{user_name}에게",
+        r"\b내게\b": f"{user_name}에게",
+        r"\b나한테\b": f"{user_name}한테",
+        r"\b나와\b": f"{user_name}과",
+        r"\b나랑\b": f"{user_name}랑",
+
+        # 2인칭 (페르소나)
+        r"\b너는\b": f"{persona_name}은",
+        r"\b네가\b": f"{persona_name}이",
+        r"\b니가\b": f"{persona_name}이",
+        r"\b너의\b": f"{persona_name}의",
+        r"\b네\b": f"{persona_name}의",
+        r"\b니\b": f"{persona_name}의",
+        r"\b너를\b": f"{persona_name}을",
+        r"\b너한테\b": f"{persona_name}한테",
+        r"\b너에게\b": f"{persona_name}에게",
+        r"\b너랑\b": f"{persona_name}랑",
+        r"\b너와\b": f"{persona_name}와",
+        r"\b너도\b": f"{persona_name}도",
+
+        # 1인칭 복수 (우리)
+        r"\b우리\b": f"{user_name}와 {persona_name}",
+        r"\b우리는\b": f"{user_name}와 {persona_name}은",
+        r"\b우리의\b": f"{user_name}와 {persona_name}의",
+        r"\b우릴\b": f"{user_name}와 {persona_name}을",
+        r"\b우리를\b": f"{user_name}와 {persona_name}을",
+        r"\b우리에게\b": f"{user_name}와 {persona_name}에게",
+        r"\b우리한테\b": f"{user_name}와 {persona_name}한테",
+        r"\b우리랑\b": f"{user_name}와 {persona_name}랑",
+        r"\b우리와\b": f"{user_name}와 {persona_name}와",
+    }
+
+    # 2. 정규식 적용
+    for pattern, replacement in pronoun_map.items():
+        query = re.sub(pattern, replacement, query)
+
+    return query
+
 queries = [
     "우리 처음 만났을 때 기억나?",
     "지환과 유저가 처음만났을때 기억나?"
@@ -206,6 +254,7 @@ search_results = []
 
 for query in queries:
     # 검색 수행
+    query = replace_pronouns(query)
     results = perform_search(vector_store, query)
     
     # 결과를 리스트에 추가
@@ -262,3 +311,4 @@ print(f"검색 결과가 CSV 파일로 저장되었습니다: {output_csv_path}"
 # ai_msg = chat_model.invoke(messages)
 
 # print(ai_msg.content)
+
