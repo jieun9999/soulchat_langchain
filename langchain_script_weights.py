@@ -143,20 +143,17 @@ cached_embedder = CacheBackedEmbeddings.from_bytes_store(
 
 ## 4. 유사도 계산함수 및 가중치 고려한 검색함수 로드
 # 제목과 본문 유사도 계산 함수
-# query: 사용자가 입력한 검색어(쿼리). 
-# chunk: 제목과 본문이 포함된 텍스트 청크.
-# embedder: 텍스트를 벡터로 변환하는 임베딩 모델.
-# title_weight: 제목의 유사도에 부여할 가중치 (기본값은 1.5).
 def calculate_similarity(query, chunk, embedder, title_weight=1.5):
-    title, content = chunk.split("\n", 1) if "\n" in chunk else (chunk, "") # 청크(chunk)에서 제목과 본문을 분리
+    title, content = chunk.split("\n", 1) if "\n" in chunk else (chunk, "") 
+    # 청크(chunk)에서 제목과 본문을 분리
     title = title.replace("제목: ", "").strip()
-    query_emb, title_emb, content_emb = embedder.embed_query(query), embedder.embed_query(title), embedder.embed_query(content) # 쿼리(query), 제목(title), **본문(content)**을 임베딩 모델(embedder)을 사용해 각각 벡터로 변환
+    query_emb, title_emb, content_emb = embedder.embed_query(query), embedder.embed_query(title), embedder.embed_query(content) 
+    # 쿼리(query), 제목(title), **본문(content)**을 임베딩 모델(embedder)을 사용해 각각 벡터로 변환
     title_sim, content_sim = util.cos_sim(query_emb, title_emb).item(), util.cos_sim(query_emb, content_emb).item()
     # 코사인 유사도를 계산:
     # query_emb와 title_emb 간의 유사도: title_sim.
     # query_emb와 content_emb 간의 유사도: content_sim.
     return (title_weight * title_sim) + content_sim, title_sim, content_sim
-    # 반환값:최종 유사도, 제목 유사도, 본문 유사도
 
 # 가중치를 고려한 검색 함수
 def search_with_weight(vector_store, query, k=3, title_weight=1.5):
