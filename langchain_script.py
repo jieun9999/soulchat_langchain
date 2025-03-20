@@ -2,6 +2,7 @@ from langchain_huggingface import ChatHuggingFace, HuggingFacePipeline
 from transformers import BitsAndBytesConfig
 from langchain_core.messages import (HumanMessage,SystemMessage)
 from langchain.text_splitter import RecursiveCharacterTextSplitter
+from langchain.prompts import ChatPromptTemplate
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_chroma import Chroma
 from langchain_core.documents import Document
@@ -13,8 +14,10 @@ from dotenv import load_dotenv
 from langchain_openai import OpenAIEmbeddings
 from langchain.embeddings import CacheBackedEmbeddings
 from langchain.storage import LocalFileStore
+from langchain import hub as prompts
 from langsmith import traceable
 import pandas as pd
+from sentence_transformers import util
 ##############################################################################################
 # 청킹 방법: 먼저 제목을 기준으로 큰 단위로 분할한 뒤, 각 섹션 내에서 RecursiveCharacterTextSplitter를 사용해 청킹
 # 임베딩 모델 : open ai의 text-embedding-3-small + CacheBackedEmbeddings(캐시용)
@@ -25,7 +28,7 @@ import pandas as pd
 
 
 # 1. 문서 로드
-file_path = "/workspace/hdd/RAG/persona_250310.pdf"
+file_path = "/workspace/hdd/RAG/persona_250313.pdf"
 loader = PyPDFLoader(file_path)
 docs = loader.load() #PDF의 각 페이지를 독립적으로 처리
 # docs = docs[1:]  # 첫 번째 페이지를 제외
@@ -48,12 +51,25 @@ all_text = "\n".join([remove_page_numbers(doc.page_content) for doc in docs])
 # 2. 문서 분할
 # 제목 리스트 정의
 titles = [
-    "기본 정보", "외모", "패션 스타일", "직업", "능력", "관심기술","싫어하는 환경", "싫어하는 사람",
-    "실패에 대한 두려움", "거절에 대한 두려움", "예측 불가능한 상황에 대한 두려움",
-    "연애경험", "인간관계","어린 시절", "학창 시절", "지환과 유저의 첫만남", "유저에 대한 감정",
-    "취미생활", "이상형", "일상적인 아침", "일상적인 점심", "일상적인 저녁", "좋아하는 음식","싫어하는 음식", 
+    "이름", "생일", "출생지", "거주지","가족 관계", "별자리", "MBTI", "외모",
+    "평상시 성격 : 내향적", "평상시 성격 : 이성적", "연애 상대에게는 감성적인 성격","패션 스타일", "직업", "개발 능력", 
+    "관심기술","공부방법: 알고리즘 문제풀이","공부방법: 서비스 개발","공부하는 장소 : 학교 도서관","공부하는 장소 : 조용한 카페",
+    "일상적인 주말 아침", "일상적인 주말 점심", "일상적인 주말 저녁",
+    "싫어하는 장소, 환경", "싫어하는 사람",
+    "실패에 대한 두려움", "실패 대처 방법: 주위의 피드백 활용","예측 불가능한 상황에 대한 두려움",
+    "연애경험","이성과의 대화 스타일", "인간관계","어린 시절 : 초등학교", "학창 시절 : 중학교", "학창 시절 : 고등학교",
+    "지환과 유저의 첫만남", "유저에 대한 감정","학교 끝나고 유저와 데이트 : 카페에서 공부", "학교 끝나고 유저와 데이트 : 캠퍼스 산책 데이트",
+    "취미생활 : 러닝", "취미생활 : 영화", "취미생활 : 음악",
+    "좋아하는 스타일, 이상형",  
+    "일상적인 아침", "일상적인 점심", "일상적인 저녁",
+    "좋아하는 음식 : 김치볶음밥","좋아하는 음식 : 삼겹살",
+    "싫어하는 음식 : 해산물", "싫어하는 음식 : 고수",
     "일에 대한 가치관", "기술에 대한 가치관", "인간관계에 대한 가치관",
-    "스트레스 해소 방법", "특이한 습관", "좋아하는 장소","소중히 여기는 물건"
+    "스트레스 해소 방법 : 산책", "스트레스 해소 방법 : 초콜릿",
+    "특이한 습관 : 손톱 뜯기",  "특이한 습관 : 책상 정리",
+    "좋아하는 장소 : 공원 벤치","좋아하는 장소 : PC방",
+    "소중히 여기는 물건 : 첫번째 노트북", "소중히 여기는 물건 : 손목시계", 
+    "좋아하는 여행 스타일 : 자연 속 힐링", "좋아하는 여행지 : 강릉"
 ]
 
 
@@ -150,27 +166,58 @@ vector_store_path = "./chroma_langchain_db"
 if os.path.exists(vector_store_path):
     print("기존 벡터스토어를 로드합니다...")
     vector_store = Chroma(
-        collection_name="persona_collection2",
+        collection_name="persona_collection",
         embedding_function=cached_embedder,
         persist_directory=vector_store_path,
     )
 else:
     print("벡터스토어를 생성합니다...")
     vector_store = Chroma(
-        collection_name="persona_collection2",
+        collection_name="persona_collection3",
         embedding_function=cached_embedder,
         persist_directory=vector_store_path,  # 데이터를 로컬에 저장
     )
     vector_store.add_documents(docs)  # 벡터스토어(Vector Store)에 문서(docs)를 추가
     print("벡터스토어가 생성되었습니다.")
 
+# @traceable
+# def perform_search(vector_store, query, k=1):
+#     """
+#     벡터 스토어에서 검색을 수행하고 결과를 반환합니다.
+#     """
+#     result = vector_store.similarity_search_with_score(query=query, k=k)
+#     return result
+
+# 제목과 본문 유사도 계산 함수
+# query: 사용자가 입력한 검색어(쿼리). 
+# chunk: 제목과 본문이 포함된 텍스트 청크.
+# embedder: 텍스트를 벡터로 변환하는 임베딩 모델.
+# title_weight: 제목의 유사도에 부여할 가중치 (기본값은 1.5).
+def calculate_similarity(query, chunk, embedder, title_weight=1.5):
+    title, content = chunk.split("\n", 1) if "\n" in chunk else (chunk, "") # 청크(chunk)에서 제목과 본문을 분리
+    title = title.replace("제목: ", "").strip()
+    query_emb, title_emb, content_emb = embedder.embed_query(query), embedder.embed_query(title), embedder.embed_query(content) # 쿼리(query), 제목(title), **본문(content)**을 임베딩 모델(embedder)을 사용해 각각 벡터로 변환
+    title_sim, content_sim = util.cos_sim(query_emb, title_emb).item(), util.cos_sim(query_emb, content_emb).item()
+    # 코사인 유사도를 계산:
+    # query_emb와 title_emb 간의 유사도: title_sim.
+    # query_emb와 content_emb 간의 유사도: content_sim.
+    return (title_weight * title_sim) + content_sim, title_sim, content_sim
+    # 반환값:최종 유사도, 제목 유사도, 본문 유사도
+
 @traceable
-def perform_search(vector_store, query, k=3):
-    """
-    벡터 스토어에서 검색을 수행하고 결과를 반환합니다.
-    """
+def search_with_weight(vector_store, query, k=1, title_weight=1.5):
     results = vector_store.similarity_search_with_score(query=query, k=k)
-    return results
+    weighted_results = [
+        {
+            "chunk": result[0].page_content,
+            "final_score": final_score,
+            "title_sim": title_sim,
+            "content_sim": content_sim
+        }
+        for result in results #results 리스트에서 하나씩 result를 가져옵니다.
+            for final_score, title_sim, content_sim in [calculate_similarity(query, result[0].page_content, cached_embedder, title_weight)] #calculate_similarity 함수는 튜플 (final_score, title_sim, content_sim)을 반환합니다.[calculate_similarity(...)]는 리스트로 감싸져 있으므로, 여기서 반환된 튜플을 바로 반복문으로 풀어냅니다.
+    ]  
+    return sorted(weighted_results, key=lambda x: x["final_score"], reverse=True)[:k]
 
 # 5. Retriever 생성
 
@@ -224,7 +271,6 @@ def replace_pronouns(query, persona_name="서지환", user_name="유저"):
 
 queries = [
     "우리 처음 만났을 때 기억나?",
-    "지환과 유저가 처음만났을때 기억나?"
     "어떤 기술에 관심이 있어?",
     "다음에 카페 가서 공부하자! 어때?",
     "너는 주말에 보통 뭐 해?",
@@ -247,68 +293,80 @@ queries = [
 ]
 
 
-# 검색 결과를 CSV 파일로 저장
-output_csv_path = "/workspace/hdd/RAG/search_results.csv"
+# 응답 결과를 CSV 파일로 저장
+output_csv_path = "/workspace/hdd/RAG/rag_results1.csv"
 # 검색 결과를 저장할 리스트
-search_results = []
+# search_results = []
+
+#rag 결과 저장 리스트
+rag_results = []
+
+# LLM 추론
+quantization_config = BitsAndBytesConfig(
+    load_in_4bit=True,
+    bnb_4bit_quant_type="nf4",
+    bnb_4bit_compute_dtype="float16",
+    bnb_4bit_use_double_quant=True,
+)
+
+llm = HuggingFacePipeline.from_model_id(
+    model_id="NCSOFT/Llama-VARCO-8B-Instruct",
+    task="text-generation",
+    pipeline_kwargs=dict(
+        max_new_tokens=512,
+        do_sample=False,
+        repetition_penalty=1.03,
+        return_full_text=False,
+    ),
+    model_kwargs={"quantization_config": quantization_config},
+)
+
+chat_model = ChatHuggingFace(llm=llm)
+
+# LangSmith에서 저장된 프롬프트 가져오기
+# 'prompt_id'는 LangSmith에서 프롬프트의 고유 식별자입니다
+prompt_id = "character_chat4"
+chain = prompts.pull(prompt_id)
+print(f"❤️{chain}❤️")
+prompt_template = ChatPromptTemplate.from_template(chain.from_template)
+
+
+# # 프롬프트 데이터로부터 ChatPromptTemplate 생성
+# prompt_template = ChatPromptTemplate.from_messages(prompt_data.content)
+
 
 for query in queries:
     # 검색 수행
     query = replace_pronouns(query)
-    results = perform_search(vector_store, query)
-    
-    # 결과를 리스트에 추가
-    for result in results:
-        chunk = result[0].page_content  # 검색된 청크
-        similarity_score = result[1]  # 유사도 점수
-        search_results.append({
-            "쿼리": query,
-            "유사도 점수": similarity_score,
-            "검색된 청크": chunk
-        })
+    result = search_with_weight(vector_store, query) #상위 문서 1개 반환
+    # print(result)
+    chunk = result[0]['chunk'] # 검색된 청크
+    similarity_score = result[0]['final_score']  # 유사도 점수
+
+    #llm 넣기
+    response = llm.invoke(prompt_template.format(Initiation=query, Context=chunk))
+
+    response = chat_model.invoke
+
+    best_result = {
+        "쿼리": query,
+        "유사도 점수": similarity_score,
+        "검색된 청크": chunk,
+        "생성된 응답" : response
+    }
+
+    rag_results.append(best_result)
+        
 
 # 리스트를 DataFrame으로 변환
-df = pd.DataFrame(search_results)
+df = pd.DataFrame(rag_results)
 
 # CSV 파일로 저장
 df.to_csv(output_csv_path, index=False, encoding="utf-8-sig")
 
 print(f"검색 결과가 CSV 파일로 저장되었습니다: {output_csv_path}")
+# print("RAG에서 질문과 관련성이 가장 높은 청크 하나로 응답 생성성을 완료했습니다.")
 
-# 6. 프롬프트 생성
 
 
-# 7. LLM 추론
-
-# quantization_config = BitsAndBytesConfig(
-#     load_in_4bit=True,
-#     bnb_4bit_quant_type="nf4",
-#     bnb_4bit_compute_dtype="float16",
-#     bnb_4bit_use_double_quant=True,
-# )
-
-# llm = HuggingFacePipeline.from_model_id(
-#     model_id="NCSOFT/Llama-VARCO-8B-Instruct",
-#     task="text-generation",
-#     pipeline_kwargs=dict(
-#         max_new_tokens=512,
-#         do_sample=False,
-#         repetition_penalty=1.03,
-#         return_full_text=False,
-#     ),
-#     model_kwargs={"quantization_config": quantization_config},
-# )
-
-# chat_model = ChatHuggingFace(llm=llm)
-
-# messages = [
-#     SystemMessage(content="You are a helpful assistant Varco. Respond accurately and diligently according to the user's instructions."),
-#     HumanMessage(
-#         content="안녕하세요"
-#     ),
-# ]
-
-# ai_msg = chat_model.invoke(messages)
-
-# print(ai_msg.content)
 
