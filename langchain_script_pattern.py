@@ -1,22 +1,10 @@
+import os
+import json
+import csv
 from langchain_huggingface import ChatHuggingFace, HuggingFacePipeline
 from transformers import BitsAndBytesConfig
-from langchain_core.messages import (HumanMessage,SystemMessage)
-from langchain.text_splitter import RecursiveCharacterTextSplitter
-from langchain_chroma import Chroma
-from langchain_core.documents import Document
-from langchain_core.runnables import RunnableConfig
-from langchain_community.document_loaders import PyPDFLoader
-import re
-import os
-from dotenv import load_dotenv
-from langchain_openai import OpenAIEmbeddings
-from langchain.embeddings import CacheBackedEmbeddings
-from langchain.storage import LocalFileStore
-from langchain import hub as prompts
-from langsmith import traceable
-import pandas as pd
-from sentence_transformers import util
-import json
+from langchain_core.messages import HumanMessage, SystemMessage
+import textwrap  # 공백 제거를 위한 모듈 추가
 
 ##############################################################################################
 # 1. LLM 설정: NCSOFT/Llama-VARCO-8B-Instruct
@@ -46,64 +34,92 @@ llm = HuggingFacePipeline.from_model_id(
 chat_model = ChatHuggingFace(llm=llm)
 
 ##############################################################################################
-# 2. JSON 파일 로드 및 상황 정보 추출
+# 2. JSON 파일 경로 리스트 정의
 ###############################################################################################
 
-# JSON 파일 로드
-json_file_path = "/workspace/hdd/5.empatic_conversation/TL_불안_연인/Empathy_불안_연인_1.json"
-with open(json_file_path, "r", encoding="utf-8") as file:
-    empathy_data = json.load(file)
-
-# JSON 데이터에서 "utterances" 키 추출
-utterances = empathy_data.get("utterances", [])
-
-# 전체 대화 패턴 추출
-conversation_patterns = []
-for utterance in utterances:
-    role = utterance["role"]
-    text = utterance["text"]
-    conversation_patterns.append(f"[{role.capitalize()}] {text}")
-
-# 상황 설명 생성
-context_description = f"""
-당신은 유저와 연인(lover)입니다. 따라서, 당신의 목표는 주어진 사용자(User)의 발화(instruction)에 대해 공감하고,다정하고 사려깊은 말투로 적절한 조언을 제공하는 것입니다.
-
-[역할]
-당신은 **Listener**의 역할을 맡고 있습니다. Listener는 상대방의 말을 경청하고, 공감하며, 위로와 조언을 제공합니다. 대화에서 Listener의 역할을 충실히 수행해야 합니다.
-
-[주의]
-유저의 쿼리는 대화 패턴과 다를 수 있습니다. 따라서, 대화 패턴을 모방하는 것이지 동일한 상황이라고 생각하면 안 됩니다. 
-유저의 쿼리를 기반으로 적절히 공감하고 위로하며, 조언을 제공하세요.
-
-[대화 패턴]
-"""
-# 대화 패턴 추가
-for i, pattern in enumerate(conversation_patterns, 1):
-    context_description += f"{i}. {pattern}\n"
-
-##############################################################################################
-# 3. 사용자 쿼리와 LLM 메시지 구성
-###############################################################################################
-
-# 사용자 쿼리 (비슷한 상황)
-query = "나 자동차에 부딪힐뻔 했어... 지금 생각하면 아찔해"
-
-# LLM에 전달할 메시지
-messages = [
-    SystemMessage(
-        content=context_description
-    ),
-    HumanMessage(
-        content=query
-    )
+# JSON 파일 경로 리스트
+json_file_paths = [
+    "/workspace/hdd/5.empatic_conversation/TL_기쁨_연인/Empathy_기쁨_연인_1.json",
+    "/workspace/hdd/5.empatic_conversation/TL_당황_연인/Empathy_당황_연인_1.json",
+    "/workspace/hdd/5.empatic_conversation/TL_분노_연인/Empathy_분노_연인_1.json",
+    "/workspace/hdd/5.empatic_conversation/TL_불안_연인/Empathy_불안_연인_1.json",
+    "/workspace/hdd/5.empatic_conversation/TL_상처_연인/Empathy_상처_연인_1.json",
+    "/workspace/hdd/5.empatic_conversation/TL_슬픔_연인/Empathy_슬픔_연인_1.json"
 ]
 
+# 사용자 쿼리 배열 (각 감정에 대응)
+queries = [
+    "우리 고양이에게 딱 맞는 간식을 찾았어!",  # 기쁨
+    "자기야. 나 오늘 부끄러운 일 있었어.",  # 당황
+    "세탁기 때문에 내 통장이 완전 텅 비어버렸어",  # 분노
+    "나 자동차에 부딪힐 뻔했어... 지금 생각하면 아찔해.",  # 불안
+    "상사가 일 못한다고 대뜸 소리를 지르더라",  # 상처
+    "청바지를 새로 샀는데, 다리가 짧아보여. 망했어."  # 슬픔
+]
+
+# CSV 파일 저장 경로
+output_csv_path = "/workspace/hdd/RAG/rag_context_responses.csv"
+
 ##############################################################################################
-# 4. LLM 호출 및 응답 생성
+# 3. CSV 파일 생성 및 JSON 파일별 작업 수행
 ###############################################################################################
 
-response = chat_model.invoke(input=messages)
+with open(output_csv_path, mode="w", encoding="utf-8", newline="") as csv_file:
+    csv_writer = csv.writer(csv_file)
+    csv_writer.writerow(["Query", "Response"])  # 헤더 작성
 
-# 결과 출력
-print(f"✅'{query}'에 대한 작업 완료")
-print(f"▶️ 응답 : {response.content}\n")
+    # JSON 파일별로 작업 수행
+    for json_path, query in zip(json_file_paths, queries):
+        # JSON 파일 로드
+        with open(json_path, "r", encoding="utf-8") as file:
+            empathy_data = json.load(file)
+
+        # JSON 데이터에서 "utterances" 키 추출
+        utterances = empathy_data.get("utterances", [])
+
+        # 대화 패턴 추출
+        conversation_patterns = []
+        for utterance in utterances:
+            role = utterance["role"]
+            text = utterance["text"]
+            conversation_patterns.append(f"[{role.capitalize()}] {text}")
+
+        # 상황 설명 생성
+        # 멀티라인 문자열의 불필요한 들여쓰기를 자동으로 제거
+        # Automatically remove unnecessary indentation from the multiline string
+        context_description = textwrap.dedent(f"""
+            You are the user's partner (lover). Respond in a casual tone, using informal language as if speaking to a close partner or lover. 
+            Ensure your responses are empathetic, comforting, and thoughtful, while maintaining the casual and intimate tone throughout the conversation.
+
+            [Role]
+            You take on the role of a **Listener**. The Listener listens attentively to the other person's words, empathizes, and provides comfort and advice. You must faithfully fulfill the role of the Listener in the conversation.
+
+            [Caution]
+            The user's utterance (instruction) may differ from the conversation patterns. Therefore, mimic the conversation patterns but do not assume it is the same situation.
+            Based on the user's utterance (instruction), empathize appropriately, provide comfort, and offer advice.
+            If the user displays self-deprecating or self-critical behavior, do not empathize with those attitudes. Instead, encourage and uplift them with positive and supportive responses.
+
+            [Conversation Patterns]
+        """)
+
+        # 대화 패턴 추가
+        for i, pattern in enumerate(conversation_patterns, 1):
+            context_description += f"{i}. {pattern}\n"
+
+        # LLM에 전달할 메시지
+        messages = [
+            SystemMessage(content=context_description),
+            HumanMessage(content=query)
+        ]
+
+        # LLM 호출 및 응답 생성
+        response = chat_model.invoke(input=messages)
+
+        # 결과 출력 및 CSV 저장
+        print(f"✅ 컨텍스트 : {context_description}")
+        print(f"▶️ 응답 : {response.content}\n")
+
+        # CSV 파일에 저장
+        csv_writer.writerow([query, response.content])
+
+print(f"모든 응답이 '{output_csv_path}'에 저장되었습니다.")
