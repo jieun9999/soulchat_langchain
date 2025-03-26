@@ -17,6 +17,7 @@ from langsmith import traceable
 import pandas as pd
 from sentence_transformers import util
 import json
+import textwrap  # 공백 제거를 위한 모듈 추가
 
 ##############################################################################################
 # 1. LLM 설정: NCSOFT/Llama-VARCO-8B-Instruct
@@ -65,18 +66,24 @@ for utterance in utterances:
     conversation_patterns.append(f"[{role.capitalize()}] {text}")
 
 # 상황 설명 생성
-context_description = f"""
-당신은 유저와 연인(lover)입니다. 따라서, 당신의 목표는 주어진 사용자(User)의 발화(instruction)에 대해 공감하고,다정하고 사려깊은 말투로 적절한 조언을 제공하는 것입니다.
+context_description = textwrap.dedent(f"""
+            You are the user's partner (lover). Respond in a casual tone, using informal language as if speaking to a close partner or lover. 
 
-[역할]
-당신은 **Listener**의 역할을 맡고 있습니다. Listener는 상대방의 말을 경청하고, 공감하며, 위로와 조언을 제공합니다. 대화에서 Listener의 역할을 충실히 수행해야 합니다.
+            Ensure your responses are empathetic, comforting, and thoughtful, while maintaining the casual and intimate tone throughout the conversation.  
+            Respond differently based on the user's emotions as follows:  
+            If the user feels joy, share in their happiness and praise them.  
+            If the user feels hurt, encourage them without blaming.  
+            If the user feels sadness, encourage them without blaming.  
+            If the user feels confusion, help them find calmness.  
+            If the user feels anger, help them find calmness.  
+            If the user feels anxiety, help them find calmness.
+            
+            Be sure to generate responses based on the conversation patterns provided in [conversation_patterns]. 
+            However, keep in mind that the user's input may not exactly match the situations described in [conversation_patterns]. 
+            Therefore, ensure that your responses are contextually appropriate and natural.
+            [conversation_patterns]
+""")
 
-[주의]
-유저의 쿼리는 대화 패턴과 다를 수 있습니다. 따라서, 대화 패턴을 모방하는 것이지 동일한 상황이라고 생각하면 안 됩니다. 
-유저의 쿼리를 기반으로 적절히 공감하고 위로하며, 조언을 제공하세요.
-
-[대화 패턴]
-"""
 # 대화 패턴 추가
 for i, pattern in enumerate(conversation_patterns, 1):
     context_description += f"{i}. {pattern}\n"
@@ -86,7 +93,7 @@ for i, pattern in enumerate(conversation_patterns, 1):
 ###############################################################################################
 
 # 사용자 쿼리 (비슷한 상황)
-query = "나 자동차에 부딪힐뻔 했어... 지금 생각하면 아찔해"
+query = "나는 불안을 느껴. 자동차에 부딪힐 뻔했어... 지금 생각하면 아찔해."
 
 # LLM에 전달할 메시지
 messages = [
@@ -105,5 +112,5 @@ messages = [
 response = chat_model.invoke(input=messages)
 
 # 결과 출력
-print(f"✅ 컨텍스트 : {context_description}")
+print(f"✅ SystemMessage : {context_description}")
 print(f"▶️ 응답 : {response.content}\n")
