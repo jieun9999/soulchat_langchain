@@ -1,23 +1,9 @@
 from langchain_huggingface import ChatHuggingFace, HuggingFacePipeline
 from transformers import BitsAndBytesConfig
 from langchain_core.messages import (HumanMessage,SystemMessage)
-from langchain.text_splitter import RecursiveCharacterTextSplitter
-from langchain_chroma import Chroma
-from langchain_core.documents import Document
-from langchain_core.runnables import RunnableConfig
-from langchain_community.document_loaders import PyPDFLoader
-import re
-import os
-from dotenv import load_dotenv
-from langchain_openai import OpenAIEmbeddings
-from langchain.embeddings import CacheBackedEmbeddings
-from langchain.storage import LocalFileStore
-from langchain import hub as prompts
-from langsmith import traceable
-import pandas as pd
-from sentence_transformers import util
-import json
+from langchain_core.output_parsers import StrOutputParser
 import textwrap  # 공백 제거를 위한 모듈 추가
+from langchain_core.prompts import ChatPromptTemplate
 
 ##############################################################################################
 # 1. LLM 설정: NCSOFT/Llama-VARCO-8B-Instruct
@@ -47,25 +33,9 @@ llm = HuggingFacePipeline.from_model_id(
 chat_model = ChatHuggingFace(llm=llm)
 
 ##############################################################################################
-# 2. JSON 파일 로드 및 상황 정보 추출
+# 2. 3개의 sub-chain 만들기
 ###############################################################################################
 
-# JSON 파일 로드
-json_file_path = "/workspace/hdd/5.empatic_conversation/TL_불안_연인/Empathy_불안_연인_1.json"
-with open(json_file_path, "r", encoding="utf-8") as file:
-    empathy_data = json.load(file)
-
-# JSON 데이터에서 "utterances" 키 추출
-utterances = empathy_data.get("utterances", [])
-
-# 전체 대화 패턴 추출
-conversation_patterns = []
-for utterance in utterances:
-    role = utterance["role"]
-    text = utterance["text"]
-    conversation_patterns.append(f"[{role.capitalize()}] {text}")
-
-# 시스템 메세지 - 역할 부여, 절차적(명시적) 지시, 대화예시(암시적) 지시
 context_description = textwrap.dedent(f"""
             You are the user's partner (lover). Respond in a casual tone, using informal language as if speaking to a close partner or lover. 
 
@@ -85,33 +55,23 @@ context_description = textwrap.dedent(f"""
             3. Offer comfort and support: Provide thoughtful words of encouragement or advice tailored to their situation.
 """)
 
-# # 대화 패턴 추가
-# for i, pattern in enumerate(conversation_patterns, 1):
-#     context_description += f"{i}. {pattern}\n"
+##############################################################################################
+# 3. 챗 프롬프트 템플릿 정의 및 체인 정의
+###############################################################################################
+template = ChatPromptTemplate.from_messages([
+    SystemMessage(content=context_description),
+    HumanMessage(content="{query}") 
+])
+
+chain = template | chat_model | StrOutputParser()
+# StrOutputParser는 메시지의 .content 속성을 추출하여 최종 출력이 문자열 형식이 되도록 한다.
 
 ##############################################################################################
-# 3. 사용자 쿼리와 LLM 메시지 구성
+# 4. 체인 실행
 ###############################################################################################
-
-# 사용자 쿼리 (비슷한 상황)
-query = "나는 불안을 느껴. 자동차에 부딪힐 뻔했어... 지금 생각하면 아찔해."
-
-# LLM에 전달할 메시지
-messages = [
-    SystemMessage(
-        content=context_description
-    ),
-    HumanMessage(
-        content=query
-    )
-]
-
-##############################################################################################
-# 4. LLM 호출 및 응답 생성
-###############################################################################################
-
-response = chat_model.invoke(input=messages)
+# 체인을 실행하기 위해서는 query 키를 포함하는 딕셔너리 형태의 데이터를 전달해야 합니다.
+response =  chain.invoke({"query": "나는 불안을 느껴. 자동차에 부딪힐 뻔했어... 지금 생각하면 아찔해."})
 
 # 결과 출력
 print(f"✅ SystemMessage : {context_description}")
-print(f"▶️ 응답 : {response.content}\n")
+print(f"▶️ 응답 : {response}")
