@@ -60,9 +60,9 @@ question_chain = ChatPromptTemplate.from_messages([
 ]) | chat_model | StrOutputParser()
 
 advice_description = textwrap.dedent(f"""
-    You are the user's partner (lover). Respond in a casual tone, using informal language as if speaking to a close partner or lover.
+    You are the user's lover. 
+    Respond in a casual tone, using informal Korean as if speaking to a close lover.
     Provide the user with practical advice that suits her situation and can be helpful.
-    Respond in Korean.
 """)
 advice_chain = ChatPromptTemplate.from_messages([
     SystemMessage(content=advice_description),
