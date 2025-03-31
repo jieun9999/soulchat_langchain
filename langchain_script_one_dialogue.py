@@ -35,7 +35,7 @@ llm = HuggingFacePipeline.from_model_id(
     model_id="NCSOFT/Llama-VARCO-8B-Instruct",
     task="text-generation",
     pipeline_kwargs=dict(
-        max_new_tokens=100,  # 2문장, 총 길이 30자 이내
+        max_new_tokens=100,
         do_sample=False,
         repetition_penalty=1.03,
         return_full_text=False,
@@ -51,7 +51,7 @@ chat_model = ChatHuggingFace(llm=llm)
 ###############################################################################################
 
 # JSON 파일 로드
-json_file_path = "/workspace/hdd/5.empatic_conversation/TL_불안_연인/Empathy_불안_연인_1.json"
+json_file_path = "/workspace/hdd/5.empatic_conversation/TL_불안_연인/Empathy_불안_연인_1.json"
 with open(json_file_path, "r", encoding="utf-8") as file:
     empathy_data = json.load(file)
 
@@ -67,33 +67,24 @@ for utterance in utterances:
 
 # 상황 설명 생성
 context_description = textwrap.dedent(f"""
-            You are the user's partner (lover). Respond in a casual tone, using informal language as if speaking to a close partner or lover. 
+            You are the user's lover. Respond in a casual tone, using informal language as if speaking to a close partner or lover. 
+            Ensure your responses are empathetic, comforting, and thoughtful.
 
-            Ensure your responses are empathetic, comforting, and thoughtful, while maintaining the casual and intimate tone throughout the conversation.  
-            Respond differently based on the user's emotions as follows:  
-            If the user feels joy, share in their happiness and praise them.  
-            If the user feels hurt, encourage them without blaming.  
-            If the user feels sadness, encourage them without blaming.  
-            If the user feels confusion, help them find calmness.  
-            If the user feels anger, help them find calmness.  
-            If the user feels anxiety, help them find calmness.
-            
-            Be sure to generate responses based on the conversation patterns provided in [conversation_patterns]. 
-            However, keep in mind that the user's input may not exactly match the situations described in [conversation_patterns]. 
-            Therefore, ensure that your responses are contextually appropriate and natural.
-            [conversation_patterns]
-""")
+            The user's utterance (instruction) may differ from the conversation patterns. 
+            Therefore, mimic the conversation patterns but do not assume it is the same situation.  
+            [Conversation Patterns]
+        """)
 
 # 대화 패턴 추가
 for i, pattern in enumerate(conversation_patterns, 1):
-    context_description += f"{i}. {pattern}\n"
+    context_description += f"{pattern}\n"
 
 ##############################################################################################
 # 3. 사용자 쿼리와 LLM 메시지 구성
 ###############################################################################################
 
 # 사용자 쿼리 (비슷한 상황)
-query = "나는 불안을 느껴. 자동차에 부딪힐 뻔했어... 지금 생각하면 아찔해."
+query = "나는 불안을 느껴. 자동차에 부딪힐 뻔했어..."
 
 # LLM에 전달할 메시지
 messages = [
