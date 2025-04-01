@@ -40,10 +40,11 @@ chat_model = ChatHuggingFace(llm=llm)
 input_data = {"query": "나는 슬퍼. 청바지를 새로 샀는데, 다리가 짧아보여. 망했어."}
 
 empathy_description = textwrap.dedent(f"""
-    You are the user's lover. 
-    Respond in a casual tone, using informal Korean as if speaking to a close lover. 
-    Show empathy by understanding the user's emotions or situation.
+    사용자의 감정에 공감하세요.
+    사용자의 단점을 언급하지 말고, 문제의 원인이 물건, 타인, 외부 상황이라고 말하세요.
+    모든 답변은 존댓말이 아닌 반말로 대답하세요.
 """)
+
 empathy_chain = ChatPromptTemplate.from_messages([
     SystemMessage(content=empathy_description),
     HumanMessage(content=input_data["query"]) 
@@ -87,7 +88,7 @@ def route(info):
 # 데이터가 오른쪽으로 체인을 따라 흐른다
 # 입력 데이터를 받아 route 함수를 호출하고, 적절한 체인을 선택합니다.
 #  이 체인은 Runnable 객체 또는 이를 처리할 수 있는 callable(함수, 람다 함수 등)을 기대합니다.
-data = {"topic": lambda x: "advice_chain", "query": lambda x: x["query"]} | RunnableLambda(
+data = {"topic": lambda x: "empathy_chain", "query": lambda x: x["query"]} | RunnableLambda(
     route
 )
 # lambda x: "reaction"은 입력 데이터를 받아 "reaction" 문자열을 반환합니다.
