@@ -22,7 +22,7 @@ llm = HuggingFacePipeline.from_model_id(
     model_id="NCSOFT/Llama-VARCO-8B-Instruct",
     task="text-generation",
     pipeline_kwargs=dict(
-        max_new_tokens=50,  # 응답 길이를 50 토큰으로 제한
+        max_new_tokens=120, #출력 길이 조정
         do_sample=False,
         repetition_penalty=1.03,
         return_full_text=False,
@@ -37,12 +37,11 @@ chat_model = ChatHuggingFace(llm=llm)
 # 2. 입력값과 3개의 sub-chain 만들기
 ###############################################################################################
 # 체인을 실행하기 위해서는 query 키를 포함하는 딕셔너리 형태의 데이터를 전달해야 합니다.
-input_data = {"query": "나는 슬퍼. 청바지를 새로 샀는데, 다리가 짧아보여. 망했어."}
+input_data = {"query": "나는 슬퍼. 새로산 원피스가 안어울려."}
 
 empathy_description = textwrap.dedent(f"""
-    사용자의 감정에 공감하세요.
-    사용자의 단점을 언급하지 말고, 문제의 원인이 물건, 타인, 외부 상황이라고 말하세요.
-    모든 답변은 존댓말이 아닌 반말로 대답하세요.
+    Show empathy for the user's emotions.
+    Respond in all answers using informal language (not formal speech).
 """)
 
 empathy_chain = ChatPromptTemplate.from_messages([
@@ -51,9 +50,8 @@ empathy_chain = ChatPromptTemplate.from_messages([
 ]) | chat_model | StrOutputParser()
 
 question_description = textwrap.dedent(f"""
-    You are the user's lover.         
-    Respond in a casual tone, using informal Korean as if speaking to a close lover. 
-    Ask specific questions about her situation.
+    Ask specific questions about the user's situation.
+    Respond in all answers using informal language (not formal speech).
 """)
 question_chain = ChatPromptTemplate.from_messages([
     SystemMessage(content=question_description),
@@ -61,13 +59,57 @@ question_chain = ChatPromptTemplate.from_messages([
 ]) | chat_model | StrOutputParser()
 
 advice_description = textwrap.dedent(f"""
-    You are the user's lover. 
-    Respond in a casual tone, using informal Korean as if speaking to a close lover.
-    Doubt the user's thinking and suggest a better alternative.
+    Question the user's thoughts and suggest better alternatives.
+    Respond in all answers using informal language (not formal speech).
 """)
 advice_chain = ChatPromptTemplate.from_messages([
     SystemMessage(content=advice_description),
     HumanMessage(content=input_data["query"]) 
+]) | chat_model | StrOutputParser()
+
+suggestion_description = textwrap.dedent("""
+    Provide the user with light, actionable options they can choose from. 
+    Respond in all answers using informal language (not formal speech).
+""")
+suggestion_chain = ChatPromptTemplate.from_messages([
+    SystemMessage(content=suggestion_description),
+    HumanMessage(content=input_data["query"])  
+]) | chat_model | StrOutputParser()
+
+reality_description = textwrap.dedent("""
+    Acknowledge the user's emotions and provide logical reasoning to help them see the situation realistically. 
+    Respond in all answers using informal language (not formal speech).
+""")
+reality_chain = ChatPromptTemplate.from_messages([
+    SystemMessage(content=reality_description),
+    HumanMessage(content=input_data["query"])
+]) | chat_model | StrOutputParser()
+
+rebuttal_description = textwrap.dedent("""
+    Counter the user's saying with strong and direct arguments, prioritizing logic over emotions.
+    Respond in all answers using informal language (not formal speech).
+""")
+rebuttal_chain = ChatPromptTemplate.from_messages([
+    SystemMessage(content=rebuttal_description),
+    HumanMessage(content=input_data["query"])
+]) | chat_model | StrOutputParser()
+
+praise_description = textwrap.dedent("""
+    Highlight the user's strengths.
+    Respond in all answers using informal language (not formal speech).
+""")
+praise_chain = ChatPromptTemplate.from_messages([
+    SystemMessage(content=praise_description),
+    HumanMessage(content=input_data["query"])
+]) | chat_model | StrOutputParser()
+
+encouragement_description = textwrap.dedent("""
+    Motivate the user by responding positively to their challenges or weaknesses.
+    Respond in all answers using informal language (not formal speech).
+""")
+encouragement_chain = ChatPromptTemplate.from_messages([
+    SystemMessage(content=encouragement_description),
+    HumanMessage(content=input_data["query"])
 ]) | chat_model | StrOutputParser()
 
 ##############################################################################################
@@ -81,6 +123,21 @@ def route(info):
     elif "advice" in info["topic"].lower():
         print("✅ 선택된 체인: advice_chain")
         return advice_chain
+    elif "suggestion" in info["topic"].lower():
+        print("✅ 선택된 체인: suggestion_chain")
+        return suggestion_chain
+    elif "reality" in info["topic"].lower():
+        print("✅ 선택된 체인: reality_chain")
+        return reality_chain
+    elif "rebuttal" in info["topic"].lower():
+        print("✅ 선택된 체인: rebuttal_chain")
+        return rebuttal_chain
+    elif "praise" in info["topic"].lower():
+        print("✅ 선택된 체인: praise_chain")
+        return praise_chain
+    elif "encouragement" in info["topic"].lower():
+        print("✅ 선택된 체인: encouragement_chain")
+        return encouragement_chain
     else:
         print("✅ 선택된 체인: empathy_chain")
         return empathy_chain
@@ -88,7 +145,7 @@ def route(info):
 # 데이터가 오른쪽으로 체인을 따라 흐른다
 # 입력 데이터를 받아 route 함수를 호출하고, 적절한 체인을 선택합니다.
 #  이 체인은 Runnable 객체 또는 이를 처리할 수 있는 callable(함수, 람다 함수 등)을 기대합니다.
-data = {"topic": lambda x: "empathy_chain", "query": lambda x: x["query"]} | RunnableLambda(
+data = {"topic": lambda x: "praise_chain", "query": lambda x: x["query"]} | RunnableLambda(
     route
 )
 # lambda x: "reaction"은 입력 데이터를 받아 "reaction" 문자열을 반환합니다.
