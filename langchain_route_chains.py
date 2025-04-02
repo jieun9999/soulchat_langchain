@@ -112,6 +112,24 @@ encouragement_chain = ChatPromptTemplate.from_messages([
     HumanMessage(content=input_data["query"])
 ]) | chat_model | StrOutputParser()
 
+joke_description = textwrap.dedent("""
+    Respond with humorous remarks to make the conversation fun.
+    Respond in all answers using informal language (not formal speech).
+""")
+joke_chain = ChatPromptTemplate.from_messages([
+    SystemMessage(content=joke_description),
+    HumanMessage(content=input_data["query"])
+]) | chat_model | StrOutputParser()
+
+experience_description = textwrap.dedent("""
+    Provide specific and relatable examples similar to the user's context.
+    Respond in all answers using informal language (not formal speech).
+""")
+experience_chain = ChatPromptTemplate.from_messages([
+    SystemMessage(content=experience_description),
+    HumanMessage(content=input_data["query"])
+]) | chat_model | StrOutputParser()
+
 ##############################################################################################
 # 3. 라우트 함수 : 특정 체인으로 분기해줌
 ###############################################################################################
@@ -138,6 +156,12 @@ def route(info):
     elif "encouragement" in info["topic"].lower():
         print("✅ 선택된 체인: encouragement_chain")
         return encouragement_chain
+    elif "joke" in info["topic"].lower():
+        print("✅ 선택된 체인: joke_chain")
+        return joke_chain
+    elif "experience" in info["topic"].lower():
+        print("✅ 선택된 체인: experience_chain")
+        return experience_chain
     else:
         print("✅ 선택된 체인: empathy_chain")
         return empathy_chain
@@ -145,7 +169,7 @@ def route(info):
 # 데이터가 오른쪽으로 체인을 따라 흐른다
 # 입력 데이터를 받아 route 함수를 호출하고, 적절한 체인을 선택합니다.
 #  이 체인은 Runnable 객체 또는 이를 처리할 수 있는 callable(함수, 람다 함수 등)을 기대합니다.
-data = {"topic": lambda x: "praise_chain", "query": lambda x: x["query"]} | RunnableLambda(
+data = {"topic": lambda x: "experience_chain", "query": lambda x: x["query"]} | RunnableLambda(
     route
 )
 # lambda x: "reaction"은 입력 데이터를 받아 "reaction" 문자열을 반환합니다.
