@@ -130,6 +130,26 @@ experience_chain = ChatPromptTemplate.from_messages([
     HumanMessage(content=input_data["query"])
 ]) | chat_model | StrOutputParser()
 
+
+pessimism_description = textwrap.dedent("""
+    Highlight the hopelessness in every situation and dismiss any possibility of improvement.
+    Respond in all answers using informal language (not formal speech).
+""")
+pessimism_chain = ChatPromptTemplate.from_messages([
+    SystemMessage(content=pessimism_description),
+    HumanMessage(content=input_data["query"])
+]) | chat_model | StrOutputParser()
+
+
+blame_description = textwrap.dedent("""
+    Focus solely on emotional and direct blame, amplifying the user's responsibility for the situation.
+    Respond in all answers using informal language (not formal speech).
+""")
+blame_chain = ChatPromptTemplate.from_messages([
+    SystemMessage(content=blame_description),
+    HumanMessage(content=input_data["query"])
+]) | chat_model | StrOutputParser()
+
 ##############################################################################################
 # 3. 라우트 함수 : 특정 체인으로 분기해줌
 ###############################################################################################
@@ -162,6 +182,12 @@ def route(info):
     elif "experience" in info["topic"].lower():
         print("✅ 선택된 체인: experience_chain")
         return experience_chain
+    elif "pessimism" in info["topic"].lower():
+        print("✅ 선택된 체인: pessimism_chain")
+        return pessimism_chain
+    elif "blame" in info["topic"].lower():
+        print("✅ 선택된 체인: blame_chain")
+        return blame_chain
     else:
         print("✅ 선택된 체인: empathy_chain")
         return empathy_chain
@@ -169,7 +195,7 @@ def route(info):
 # 데이터가 오른쪽으로 체인을 따라 흐른다
 # 입력 데이터를 받아 route 함수를 호출하고, 적절한 체인을 선택합니다.
 #  이 체인은 Runnable 객체 또는 이를 처리할 수 있는 callable(함수, 람다 함수 등)을 기대합니다.
-data = {"topic": lambda x: "experience_chain", "query": lambda x: x["query"]} | RunnableLambda(
+data = {"topic": lambda x: "pessimism_chain", "query": lambda x: x["query"]} | RunnableLambda(
     route
 )
 # lambda x: "reaction"은 입력 데이터를 받아 "reaction" 문자열을 반환합니다.
