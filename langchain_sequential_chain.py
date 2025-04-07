@@ -6,6 +6,7 @@ import textwrap  # 공백 제거를 위한 모듈 추가
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.runnables import RunnableLambda
 from langchain_core.prompts import PromptTemplate
+import time 
 
 ##############################################################################################
 # 1. LLM 설정: NCSOFT/Llama-VARCO-8B-Instruct
@@ -23,7 +24,7 @@ llm = HuggingFacePipeline.from_model_id(
     model_id="NCSOFT/Llama-VARCO-8B-Instruct",
     task="text-generation",
     pipeline_kwargs=dict(
-        max_new_tokens=100,  
+        max_new_tokens=40,  
         do_sample=False,
         repetition_penalty=1.03,
         return_full_text=False,
@@ -33,6 +34,7 @@ llm = HuggingFacePipeline.from_model_id(
 )
 
 chat_model = ChatHuggingFace(llm=llm)
+
 
 ##############################################################################################
 # 2. 입력값과 3개의 sub-chain 만들기
@@ -44,10 +46,13 @@ empathy_description = textwrap.dedent(f"""
     Show empathy for the user's emotions.
     Respond in all answers using informal language (not formal speech).
 """)
-empathy_chain = ChatPromptTemplate.from_messages([
-    SystemMessage(content=empathy_description),
-    HumanMessage(content=input_data["query"]) 
-]) | chat_model 
+empathy_chain = (
+    ChatPromptTemplate.from_messages([
+        SystemMessage(content=empathy_description),
+        HumanMessage(content=input_data["query"]) 
+    ])
+    | chat_model
+)
 
 question_description = textwrap.dedent(f"""
     Ask specific questions about the user's situation.
@@ -85,8 +90,11 @@ def route(info):
 # 데이터가 오른쪽으로 체인을 따라 흐른다
 # 입력 데이터를 받아 route 함수를 호출하고, 적절한 체인을 선택합니다.
 #  이 체인은 Runnable 객체 또는 이를 처리할 수 있는 callable(함수, 람다 함수 등)을 기대합니다.
-data = {"topic": lambda x: "empathy_chain", "query": lambda x: x["query"]} | RunnableLambda(
-    route
+data = {"topic": lambda x: "empathy_chain", "query": lambda x: x["query"]} 
+
+data = (
+    data  # 라우팅 데이터
+    | RunnableLambda(route)  # 적절한 체인을 선택
 )
 # lambda x: "reaction"은 입력 데이터를 받아 "reaction" 문자열을 반환합니다.
 # "query": lambda x: x["query"]는 나중에 입력될 데이터에서 query 키의 값을 동적으로 가져오는 역할
@@ -175,30 +183,36 @@ tone_prompt = PromptTemplate.from_template("""
 """)
 
 
+def process_input(input_data, selected_chain):
+    """
+    입력 데이터를 처리하여 최종 응답을 반환하는 함수
+    """
+    # 첫 번째 체인 실행: selected_chain에 input_data를 전달
+    first_chain_result = selected_chain.invoke({"query": input_data["query"]})  # query 값을 전달하여 실행
 
-##############################################################################################
-# 5. Sequential 체인 구성
-###############################################################################################
-
-# | 연산자를 사용하여 체인을 연결
-sequential_chain = (
-    data  # 첫 번째 체인: 라우팅
-    | RunnableLambda(
-        lambda x: (
-            print(f"🔍 첫 번째 체인 데이터: {x.content.strip()}"),  # 데이터를 출력
-            {"response": x.content.strip()}  # 이후 체인으로 전달할 데이터
-        )[1]  # 튜플에서 두 번째 값을 반환
+    # Sequential 체인 구성
+    sequential_chain = (
+        RunnableLambda(lambda _: first_chain_result)  # first_chain_result를 그대로 전달
+        | RunnableLambda(
+            lambda x: (
+                print(f"🔍 첫 번째 체인 데이터: {x.content.strip()}"),  # 데이터를 출력
+                {"response": x.content.strip()}  # 이후 체인으로 전달할 데이터
+            )[1]  # 튜플에서 두 번째 값을 반환
+        )
+        | tone_prompt  # 두 번째 체인: 일반 프롬프트 템플릿 사용
+        | llm  # 일반 언어 모델 호출
     )
-    | tone_prompt  # 두 번째 체인: 일반 프롬프트 템플릿 사용
-    | llm  # 일반 언어 모델 호출
-)
 
-##############################################################################################
-# 6. 체인 실행
-###############################################################################################
+    # Sequential 체인 실행
+    final_response = sequential_chain.invoke({"query": input_data["query"]})  # query 값을 전달하여 실행
 
-# 최종적으로 Sequential 체인을 한 번만 실행
-final_response = sequential_chain.invoke(input_data)
+    # 최종 응답 반환
+    return final_response
 
-# 결과 출력
-print(f"▶️ 최종 응답 : {final_response}\n")
+
+# 함수 호출 예시
+input_data = {"query": "나는 슬퍼. 새로산 원피스가 안어울려."}
+selected_chain = advice_chain
+
+response = process_input(input_data, selected_chain)
+print(f"최종 결과: {response}")
