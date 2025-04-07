@@ -187,6 +187,37 @@ def process_input(input_data, selected_chain):
     """
     입력 데이터를 처리하여 최종 응답을 반환하는 함수
     """
+    start_time = time.time()  # 응답 생성 시작 시간 기록
+    
+    # 첫 번째 체인 실행: selected_chain에 input_data를 전달
+    first_chain_result = selected_chain.invoke({"query": input_data["query"]})  # query 값을 전달하여 실행
+
+    # Sequential 체인 구성
+    sequential_chain = (
+        RunnableLambda(lambda _: first_chain_result)  # first_chain_result를 그대로 전달
+        | RunnableLambda(
+            lambda x: (
+                print(f"🔍 첫 번째 체인 데이터: {x.content.strip()}"),  # 데이터를 출력
+                {"response": x.content.strip()}  # 이후 체인으로 전달할 데이터
+            )[1]  # 튜플에서 두 번째 값을 반환
+        )
+        | tone_prompt  # 두 번째 체인: 일반 프롬프트 템플릿 사용
+        | llm  # 일반 언어 모델 호출
+    )
+
+    # Sequential 체인 실행
+    final_response = sequential_chain.invoke({"query": input_data["query"]})  # query 값을 전달하여 실행
+    end_time = time.time()  # 응답 생성 종료 시간 기록
+
+    # 응답 생성 시간 출력
+    print(f"응답 생성 시간: {end_time - start_time:.2f}초")
+
+    # 최종 응답 반환
+    return final_response
+
+    """
+    입력 데이터를 처리하여 최종 응답을 반환하는 함수
+    """
     # 첫 번째 체인 실행: selected_chain에 input_data를 전달
     first_chain_result = selected_chain.invoke({"query": input_data["query"]})  # query 값을 전달하여 실행
 
