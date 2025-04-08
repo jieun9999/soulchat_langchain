@@ -176,9 +176,6 @@ def route(info):
     elif "encouragement" in info["topic"].lower():
         print("✅ 선택된 체인: encouragement_chain")
         return encouragement_chain
-    elif "joke" in info["topic"].lower():
-        print("✅ 선택된 체인: joke_chain")
-        return joke_chain
     elif "experience" in info["topic"].lower():
         print("✅ 선택된 체인: experience_chain")
         return experience_chain
