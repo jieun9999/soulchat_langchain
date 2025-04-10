@@ -36,12 +36,12 @@ all_text = "\n".join([doc.page_content for doc in docs])
 # 2. 문서 분할
 # 제목 리스트 정의
 titles = [
-    "캐릭터의 경험을 묻는 질문", 
-    "캐릭터의 의견을 묻는 질문", 
-    "새로운 정보를 전달",
-    "상대방의 말에 대한 반응이나 의견을 표현",
-    "감정적 공유",
-    "중립적 공유"
+    "캐릭터의 주관적인 의견을 묻는 질문", 
+    "캐릭터의 주관적인 경험을 묻는 질문", 
+    "상대방의 말에 대한 반응을 표현",
+    "사실중심적인 경험을 공유",
+    "의견을 표현",
+    "감정중심적인 의견을 표현"
 ]
 
 def split_into_sections(text, titles):
@@ -71,7 +71,7 @@ def split_into_sections(text, titles):
 
 # RecursiveTextSplitter 설정
 text_splitter = RecursiveCharacterTextSplitter(
-    chunk_size=1200,  # 각 청크의 최대 문자 수
+    chunk_size=2000,  # 각 청크의 최대 문자 수
     chunk_overlap=100,  # 청크 간 중복 문자 수
     separators=["\n\n", "\n", " "]  # 큰 단위부터 작은 단위로 분할
 )
@@ -95,7 +95,7 @@ for title, section_content in sections.items():
             final_chunks.append(chunk)
 
 # 청킹된 결과를 txt 파일로 저장
-output_file_path = "/workspace/hdd/LangChain/chunks1200_6categories.txt"
+output_file_path = "/workspace/hdd/LangChain/chunks2000_6categories.txt"
 
 with open(output_file_path, "w", encoding="utf-8") as file:
     for i, chunk in enumerate(final_chunks):
@@ -161,16 +161,22 @@ vector_store = create_or_load_vectorstore(final_chunks, cached_embedder)
 
 # 검색 수행
 queries = [
-  "너는 혼자 등산하면서 정상까지 올라가 본 적 있어?",
-  "길거리에서 우연히 음악 공연을 보고 멈춰서 감상한 적 있니?",
-  "너는 여행 갈 때 계획을 철저히 세우는 편이야??",
-  "아침에 늦잠 자는 거 좋아해?",
-  "이번에 새로 나온 디저트 카페가 SNS에서 폭발적으로 인기라던데?",
-  "혹시 알아? 이번 주말에 무료로 열리는 야외 영화 상영회가 있대 ㅋㅋ",
-  "와, 너 진짜 열심히 준비했구나. 그런 노력은 정말 대단한 거 같아!",
+  "그 소식을 듣고 하루 종일 우울하고 심란했어..",
+  "그런 일이 생겼다니 정말 화가 나!!! 어떻게 그럴 수가 있지?",
+  "내일 발표가 있어서 너무 긴장돼.ㅠㅠㅠㅠㅠ 잘할 수 있을지 걱정이야.",
+  "그게 되겠냐?",
+  "그래? 그럼 다음에는 무슨 일이 있었어?",
+  "ㅋㅋㅋㅋㅋㅋ 그거 진짜 웃긴데!",
+  "맞아 ㅎ 나도 그렇게 느꼈어.",
   "그거 진짜 신기하다! 나도 그런 경험 해보고 싶어.",
-  "어젯밤에 하늘을 봤는데 별이 너무 많아서 잠시 멍하니 서 있었어. 정말 아름다웠어.",
-  "오늘 아침에 동네 카페에서 커피 한 잔 마시며 책을 읽었어."
+  "최근에 갔던 식당 중에 어디가 제일 좋았음?",
+  "오늘 아침에 동네 카페에서 커피 한 잔 마시며 책을 읽었엉.",
+  "그 책은 읽기 쉬운 편이더라.",
+  "최근에 생긴 카페 가봤는데 나름 괜찮더라궁 ㅎㅎ ",
+  "지난달에 새 직장을 시작했거든",
+  "어제 퇴근하고 집에 가는 길에 비가 많이 내렸어", 
+  "그 친구와 헤어지고 나서 한동안 너무 슬프더라.. 마음이 텅 빈 느낌이었어.", 
+  #가벼운 의견 표현과 감정적인 의견표현의 구분이 잘 안되는 경향
 ]
 
 results_list = []
